@@ -12,9 +12,9 @@ public class ConcurrentDBTest {
     // 数据库用户和密码
     static final String USER = "username";
     static final String PASS = "pencil";
-
+    static  int WriteCount=0;
     // 并发连接数
-    static final int NUM_CONNECTIONS =2;
+    static final int NUM_CONNECTIONS =6;
     static final int NUM_TRANSACTIONS_PER_THREAD = 1000; // 每个线程的交易次数
     static final int MAX_RETRY=8;
     public static void main(String[] args) {
@@ -31,6 +31,7 @@ public class ConcurrentDBTest {
             System.out.println("Database setup completed successfully.");
             setup_connection.close();
 
+            long startTime = System.currentTimeMillis();
 
             // 创建连接并发测试
             for (int i = 0; i < NUM_CONNECTIONS; i++) {
@@ -44,6 +45,13 @@ public class ConcurrentDBTest {
                 threads[i].join();
 
             }
+            double total=NUM_CONNECTIONS*NUM_TRANSACTIONS_PER_THREAD;
+            long endTime = System.currentTimeMillis();
+            double elapsedTime = endTime - startTime;
+            System.out.println("Total time taken: " + elapsedTime + " milliseconds");
+            System.out.println("Run " + total/(elapsedTime/1000.0) + " Transaction Per sec");
+            System.out.println("Run " + WriteCount + " Write Transaction");
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -134,8 +142,6 @@ public class ConcurrentDBTest {
 
             while (!success && retryCount < MAX_RETRY) {
                 try {
-//                    connection.setAutoCommit(false);
-
                     Statement stmt = connection.createStatement();
                     String sql = String.format("SELECT a.id, a.balance" +
                             " FROM account a JOIN customer c ON a.customer_id = c.id" +
@@ -155,16 +161,19 @@ public class ConcurrentDBTest {
                             accountTo
                     );
                      stmt.addBatch(sql);
-
-                    sql = String.format("UPDATE account SET balance = balance - %d WHERE id = %d;", amount, accountFrom);
-                    stmt.addBatch(sql);
-                    sql = String.format("UPDATE account SET balance = balance + %d WHERE id = %d;", amount, accountTo);
-                    stmt.addBatch(sql);
+                    Random random = new Random();
+                    int write_rate=random.nextInt(10)+1;
+                    if (write_rate>8){
+                        WriteCount++;
+                        sql = String.format("UPDATE account SET balance = balance - %d WHERE id = %d;", amount, accountFrom);
+                        stmt.addBatch(sql);
+                        sql = String.format("UPDATE account SET balance = balance + %d WHERE id = %d;", amount, accountTo);
+                        stmt.addBatch(sql);
+                    }
                     stmt.executeBatch();
                     success=true;
-//                    connection.commit();
                 } catch (SQLException e) {
-                    e.printStackTrace();
+//                    e.printStackTrace();
                     retryCount++;
                     try {
                         Random random = new Random();
