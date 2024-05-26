@@ -30,22 +30,21 @@ public class MySQLTest {
             Class.forName(JDBC_DRIVER);
             Connection setup_connection = DriverManager.getConnection(DB_URL, USER, PASS);
 
+            setup_connection.setTransactionIsolation(TRANSACTION_SERIALIZABLE);
+            long startTime = System.currentTimeMillis();
+            setupDatabase(setup_connection);
+            long endTime = System.currentTimeMillis();
+            double elapsedTime = endTime - startTime;
+
             setupDatabase(setup_connection);
             System.out.println("Database setup completed successfully.");
+            System.out.println("Database setup in " + elapsedTime + " milliseconds");
             setup_connection.close();
 
-            long startTime = System.currentTimeMillis();
+             startTime = System.currentTimeMillis();
             Connection connection = DriverManager.getConnection(DB_URL, USER, PASS);
             Random random = new Random();
-//            for (int i = 0; i < NUM_TRANSACTIONS_PER_THREAD; i++) {
-//                int accountFrom = random.nextInt(1000) + 1; // 1-1000
-//                int accountTo = random.nextInt(1000) + 1; // 1-1000
-//                int amount = random.nextInt(1000) + 1; // 1-1000
-////                System.out.println(accountFrom+" try transfer "+amount +" to "+accountTo);
-//                TestRunnable.transferMoney(connection, accountFrom, accountTo, amount);
-//
-//
-//            }
+
             for (int i = 0; i < NUM_CONNECTIONS; i++) {
 
                 threads[i] = new Thread(new TestRunnable(i));
@@ -58,8 +57,8 @@ public class MySQLTest {
 
             }
             double total = NUM_CONNECTIONS * NUM_TRANSACTIONS_PER_THREAD;
-            long endTime = System.currentTimeMillis();
-            double elapsedTime = endTime - startTime;
+             endTime = System.currentTimeMillis();
+             elapsedTime = endTime - startTime;
             System.out.println("Run "+total +" Transaction, Total time taken: " + elapsedTime + " milliseconds");
             System.out.println("Run " + total / (elapsedTime / 1000.0) + " Transaction Per sec");
             System.out.println("Run " + WriteCount + " Write Transaction");
@@ -133,6 +132,7 @@ public class MySQLTest {
                 System.out.println("Thread " + threadId + " is executing...");
 
                 Connection connection = DriverManager.getConnection(DB_URL, USER, PASS);
+                connection.setTransactionIsolation(TRANSACTION_SERIALIZABLE);
                 Random random = new Random();
                 for (int i = 0; i < NUM_TRANSACTIONS_PER_THREAD; i++) {
                     int accountFrom = random.nextInt(1000) + 1; // 1-1000
@@ -178,15 +178,14 @@ public class MySQLTest {
                     Random random = new Random();
                     int write_rate = random.nextInt(100) + 1;
 
-                    if (write_rate > 50) {
+                    if (write_rate > 0) {
                         WriteCount++;
                         sql = String.format("UPDATE account SET balance = balance - %d WHERE id = %d;", amount, accountFrom);
                         stmt.addBatch(sql);
                         sql = String.format("UPDATE account SET balance = balance + %d WHERE id = %d;", amount, accountTo);
                         stmt.addBatch(sql);
-                        stmt.executeBatch();
-
                     }
+                    stmt.executeBatch();
                     success = true;
                 } catch (SQLException e) {
 //                    e.printStackTrace();

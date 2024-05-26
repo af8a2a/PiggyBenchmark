@@ -1,27 +1,25 @@
 import java.sql.*;
 import java.util.Random;
 
-import org.apache.commons.math3.random.RandomDataGenerator;
-
-public class ConcurrentDBTest {
+public class SITest {
     // JDBC 驱动程序和数据库 URL
     static final String JDBC_DRIVER = "org.postgresql.Driver";
+    //for postgresql "jdbc:postgresql://localhost:5432/your_database";
     static final String DB_URL = "jdbc:postgresql://localhost:5432/your_database";
 
     // 数据库用户和密码
-    static final String USER = "username";
-    static final String PASS = "pencil";
+    static final String USER = "root";
+    static final String PASS = "12345qqaa";
     static int WriteCount = 0;
     static int RollbackCount = 0;
     // 并发连接数
-    static final int NUM_CONNECTIONS = 6;
+    static final int NUM_CONNECTIONS = 3;
     static final int NUM_TRANSACTIONS_PER_THREAD = 1000; // 每个线程的交易次数
-    static final int MAX_RETRY = 8;
+    static final int MAX_RETRY = 16;
 
     public static void main(String[] args) {
         Connection setup_connection = null;
 
-        Connection[] connections = new Connection[NUM_CONNECTIONS];
         Thread[] threads = new Thread[NUM_CONNECTIONS];
 
         try {
@@ -41,7 +39,7 @@ public class ConcurrentDBTest {
             // 创建连接并发测试
             for (int i = 0; i < NUM_CONNECTIONS; i++) {
 
-                threads[i] = new Thread(new PiggySQLThread(i));
+                threads[i] = new Thread(new SSIThread(i));
                 threads[i].start();
             }
 
@@ -66,44 +64,26 @@ public class ConcurrentDBTest {
     private static void setupDatabase(Connection connection) throws SQLException {
 
         try (Statement stmt = connection.createStatement()) {
-            String dropTableSQL = "DROP TABLE if EXISTS customer";
-            stmt.addBatch(dropTableSQL);
-            dropTableSQL="DROP TABLE if EXISTS account";
+            String dropTableSQL = "DROP TABLE if EXISTS ssi_test";
             stmt.addBatch(dropTableSQL);
 
             // 创建表
-            String createTableSQL = "CREATE TABLE  customer (" +
-                    "id INT PRIMARY KEY," +
-                    "name VARCHAR(20) NOT NULL) ";
+            String createTableSQL = "CREATE TABLE  ssi_test (id INT PRIMARY KEY) ";
             stmt.addBatch(createTableSQL);
-            String createAccountSQL =
-                    "CREATE TABLE  account (" +
-                            "id INT PRIMARY KEY," +
-                            "customer_id INT," +
-                            "balance INT NOT NULL)";
-            stmt.addBatch(createAccountSQL);
-            String createIndexSQL = "CREATE INDEX if not exists c_idx on account(customer_id)";
-            stmt.addBatch(createIndexSQL);
 
-            RandomDataGenerator randomDataGenerator = new RandomDataGenerator();
-            StringBuilder customerData = new StringBuilder();
-            StringBuilder accountData = new StringBuilder();
-            customerData.append("INSERT INTO customer VALUES ");
-            accountData.append("INSERT INTO account VALUES ");
-            for (int i = 1; i <= 1000; i++) {
-                customerData.append(String.format("(%d,'%s')", i, randomDataGenerator.nextHexString(12)));
-                accountData.append(String.format("(%d,%d,%d)", i, i, 100));
-                if (i != 1000) {
-                    customerData.append(",");
-                    accountData.append(",");
-                }
-            }
-            stmt.addBatch(customerData.toString());
-            stmt.addBatch(accountData.toString());
+            StringBuilder ssiData = new StringBuilder();
+            ssiData.append("INSERT INTO ssi_test VALUES (1);");
+            stmt.addBatch(ssiData.toString());
 
             // 插入初始数据
             try {
                 stmt.executeBatch();
+                stmt.executeQuery("select id from ssi_test");
+                ResultSet result= stmt.getResultSet();
+                while(result.next()){
+                    System.out.println("result = "+result.getInt("id"));
+                }
+
             } catch (SQLException e) {
                 e.printStackTrace();
             }
@@ -112,10 +92,10 @@ public class ConcurrentDBTest {
         }
     }
 
-    static class PiggySQLThread implements Runnable {
+    static class SSIThread implements Runnable {
         private int threadId;
 
-        PiggySQLThread(int threadId) {
+        SSIThread(int threadId) {
             this.threadId = threadId;
         }
 
@@ -131,13 +111,8 @@ public class ConcurrentDBTest {
 
                 Random random = new Random();
                 for (int i = 0; i < NUM_TRANSACTIONS_PER_THREAD; i++) {
-                    int accountFrom = random.nextInt(1000) + 1; // 1-1000
-                    int accountTo = random.nextInt(1000) + 1; // 1-1000
-                    int amount = random.nextInt(1000) + 1; // 1-1000
 
-                    transferMoney(connection, accountFrom, accountTo, amount);
-
-
+                    SSIUpdate(connection);
                 }
 
 
@@ -146,44 +121,14 @@ public class ConcurrentDBTest {
             }
         }
 
-        private static void transferMoney(Connection connection, int accountFrom, int accountTo, int amount) throws SQLException {
+        private static void SSIUpdate(Connection connection) throws SQLException {
             boolean success = false;
             int retryCount = 0;
 
             while (!success && retryCount < MAX_RETRY) {
                 try {
                     Statement stmt = connection.createStatement();
-                    String sql = "";
-
-                    sql = String.format("SELECT a.id, a.balance" +
-                            " FROM account a  JOIN customer c ON a.customer_id = c.id" +
-                            " WHERE c.id = %d" +
-                            " ORDER BY a.balance DESC" +
-                            " LIMIT 1;", accountFrom);
-
-
-                    stmt.executeQuery(sql);
-
-                    sql = String.format(
-                            "SELECT a.id, a.balance " +
-                                    "FROM account a JOIN customer c ON a.customer_id = c.id " +
-                                    "WHERE c.id = %d " +
-                                    "ORDER BY a.balance ASC " +
-                                    "LIMIT 1;",
-                            accountTo
-                    );
-                    stmt.executeQuery(sql);
-                    Random random = new Random();
-                    int read_rate = random.nextInt(100) + 1;
-                    if (read_rate > 0) {
-                        WriteCount++;
-                        sql = String.format("UPDATE account SET balance = balance - %d WHERE id = %d;", amount, accountFrom);
-                        stmt.addBatch(sql);
-                        sql = String.format("UPDATE account SET balance = balance + %d WHERE id = %d;", amount, accountTo);
-                        stmt.addBatch(sql);
-                        stmt.executeBatch();
-                    }
-
+                    stmt.executeUpdate("UPDATE ssi_test set id=id+1");
                     success = true;
                 } catch (SQLException e) {
 //                    e.printStackTrace();
